@@ -1,0 +1,41 @@
+# Ambiente virtual Python
+.venv/
+venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Distribuição / build
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.sw?
+.DS_Store
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+
+# MyPy / Pyright
+.mypy_cache/
+.pyright/
