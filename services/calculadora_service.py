@@ -98,6 +98,62 @@ async def buscar_classificacoes_tributarias(cst_id: int, data: str) -> list:
     raise last_error
 
 
+async def buscar_ncm_is(ncm: str, data: str) -> dict:
+    """
+    Checks if an NCM is subject to IS (Imposto Seletivo) for a given date.
+    Endpoint: /api/calculadora/dados-abertos/ncm?data=...&ncm=...
+    Returns: { tributadoPeloImpostoSeletivo, aliquotaAdValorem, capitulo, subitem }
+    """
+    urls = [BASE_URL]
+    if BASE_URL != LOCAL_URL:
+        urls.append(LOCAL_URL)
+
+    last_error: Exception = httpx.ConnectError("Calculadora indisponível")
+    for base in urls:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{base}/api/calculadora/dados-abertos/ncm",
+                    params={"data": data, "ncm": ncm},
+                    headers=_HEADERS,
+                )
+                resp.raise_for_status()
+                return resp.json()
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            last_error = exc
+            continue
+
+    raise last_error
+
+
+async def buscar_situacoes_is(data: str) -> list:
+    """
+    Fetches the list of CST codes for IS (Imposto Seletivo) from the
+    dados-abertos endpoint for the given date (YYYY-MM-DD).
+    Endpoint: /api/calculadora/dados-abertos/situacoes-tributarias/imposto-seletivo
+    """
+    urls = [BASE_URL]
+    if BASE_URL != LOCAL_URL:
+        urls.append(LOCAL_URL)
+
+    last_error: Exception = httpx.ConnectError("Calculadora indisponível")
+    for base in urls:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{base}/api/calculadora/dados-abertos/situacoes-tributarias/imposto-seletivo",
+                    params={"data": data},
+                    headers=_HEADERS,
+                )
+                resp.raise_for_status()
+                return resp.json()
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            last_error = exc
+            continue
+
+    raise last_error
+
+
 async def gerar_xml(payload: dict) -> Any:
     urls = [BASE_URL]
     if BASE_URL != LOCAL_URL:

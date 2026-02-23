@@ -41,7 +41,7 @@ TRANSITION_YEARS = [
         "fase": "Fase Piloto",
         "descricao": "IVA simbólico (1%) + ICMS + PIS/COFINS + IPI plenos",
         "cbs": 0.009, "ibs": 0.001,
-        "aplica_is": False,
+        "aplica_is": False, "is_fator": 0.0,
         "icms_fator": 1.0, "pisCofins_fator": 1.0, "ipi_fator": 1.0,
         "fonte": "api",
     },
@@ -50,7 +50,7 @@ TRANSITION_YEARS = [
         "fase": "Transição Inicial",
         "descricao": "CBS definitiva + ICMS pleno — PIS/COFINS/IPI extintos",
         "cbs": 0.088, "ibs": 0.001,
-        "aplica_is": True,
+        "aplica_is": True, "is_fator": 0.03,
         "icms_fator": 1.0, "pisCofins_fator": 0.0, "ipi_fator": 0.0,
         "fonte": "simulado",
     },
@@ -59,7 +59,7 @@ TRANSITION_YEARS = [
         "fase": "Transição Inicial",
         "descricao": "CBS definitiva + ICMS pleno — PIS/COFINS/IPI extintos",
         "cbs": 0.088, "ibs": 0.002,
-        "aplica_is": True,
+        "aplica_is": True, "is_fator": 0.03,
         "icms_fator": 1.0, "pisCofins_fator": 0.0, "ipi_fator": 0.0,
         "fonte": "simulado",
     },
@@ -68,7 +68,7 @@ TRANSITION_YEARS = [
         "fase": "Substituição Gradual (10%)",
         "descricao": "IBS 10% da alíquota cheia — ICMS cai para 90%",
         "cbs": 0.088, "ibs": 0.0177,
-        "aplica_is": True,
+        "aplica_is": True, "is_fator": 0.05,
         "icms_fator": 0.9, "pisCofins_fator": 0.0, "ipi_fator": 0.0,
         "fonte": "simulado",
     },
@@ -77,7 +77,7 @@ TRANSITION_YEARS = [
         "fase": "Substituição Gradual (20%)",
         "descricao": "IBS 20% da alíquota cheia — ICMS cai para 80%",
         "cbs": 0.088, "ibs": 0.0354,
-        "aplica_is": True,
+        "aplica_is": True, "is_fator": 0.07,
         "icms_fator": 0.8, "pisCofins_fator": 0.0, "ipi_fator": 0.0,
         "fonte": "simulado",
     },
@@ -86,7 +86,7 @@ TRANSITION_YEARS = [
         "fase": "Substituição Gradual (30%)",
         "descricao": "IBS 30% da alíquota cheia — ICMS cai para 70%",
         "cbs": 0.088, "ibs": 0.0531,
-        "aplica_is": True,
+        "aplica_is": True, "is_fator": 0.09,
         "icms_fator": 0.7, "pisCofins_fator": 0.0, "ipi_fator": 0.0,
         "fonte": "simulado",
     },
@@ -95,7 +95,7 @@ TRANSITION_YEARS = [
         "fase": "Substituição Gradual (40%)",
         "descricao": "IBS 40% da alíquota cheia — ICMS cai para 60%",
         "cbs": 0.088, "ibs": 0.0708,
-        "aplica_is": True,
+        "aplica_is": True, "is_fator": 0.11,
         "icms_fator": 0.6, "pisCofins_fator": 0.0, "ipi_fator": 0.0,
         "fonte": "simulado",
     },
@@ -104,7 +104,7 @@ TRANSITION_YEARS = [
         "fase": "Alíquota Cheia",
         "descricao": "Plena vigência do IVA Dual — ICMS e ISS extintos",
         "cbs": 0.088, "ibs": 0.177,
-        "aplica_is": True,
+        "aplica_is": True, "is_fator": 0.20,
         "icms_fator": 0.0, "pisCofins_fator": 0.0, "ipi_fator": 0.0,
         "fonte": "simulado",
     },
@@ -183,20 +183,32 @@ def calcular_transicao(
             cbs_rate  = cfg["cbs"]
             ibs_rate  = cfg["ibs"]
             aplica_is = cfg["aplica_is"]
+            is_fator  = cfg["is_fator"]
             itens_ano = []
             for inp in itens_input:
-                bc    = inp.get("baseCalculo", 0)
-                ncm   = inp.get("ncm", "")
-                nobj  = inp.get("numero", 1)
-                vCBS  = round(bc * cbs_rate, 2)
-                vIBS  = round(bc * ibs_rate, 2)
-                is_info = detectar_is(ncm) if aplica_is else None
-                vIS   = round(bc * is_info["rate"], 2) if is_info else 0
+                bc   = inp.get("baseCalculo", 0)
+                ncm  = inp.get("ncm", "")
+                nobj = inp.get("numero", 1)
+
+                # IS aplica quando o item tem impostoSeletivo no payload e o ano o exige
+                imp_sel = inp.get("impostoSeletivo")
+                if aplica_is and imp_sel and is_fator > 0:
+                    vIS      = round(bc * is_fator, 2)
+                    bc_ivs   = bc + vIS   # IS integra a base de cálculo do IBS/CBS
+                    is_info  = {"rate": is_fator, "desc": "Imposto Seletivo"}
+                else:
+                    vIS     = 0
+                    bc_ivs  = bc
+                    is_info = None
+
+                vCBS = round(bc_ivs * cbs_rate, 2)
+                vIBS = round(bc_ivs * ibs_rate, 2)
+
                 itens_ano.append({
                     "numero":      nobj,
                     "ncm":         ncm,
                     "descricao":   inp.get("descricao", f"Item {nobj}"),
-                    "baseCalculo": bc,
+                    "baseCalculo": bc_ivs,   # base IBS/CBS (produto + IS quando aplicável)
                     "cbs":  vCBS, "ibs":  vIBS, "is":   vIS,
                     "isInfo": is_info,
                     "aliqCbs": cbs_rate * 100,

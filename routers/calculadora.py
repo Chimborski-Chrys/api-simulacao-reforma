@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 from models.schemas import NotaFiscalInput, CalculoResponse, GerarXmlRequest
-from services.calculadora_service import calcular_tributos, gerar_xml, buscar_situacoes_tributarias, buscar_classificacoes_tributarias, ONLINE_URL, BASE_URL
+from services.calculadora_service import calcular_tributos, gerar_xml, buscar_situacoes_tributarias, buscar_classificacoes_tributarias, buscar_ncm_is, buscar_situacoes_is, ONLINE_URL, BASE_URL
 from services.transicao_service import calcular_transicao
 from services.projecao_rtc_service import calcular_projecao_rtc
 from datetime import datetime, timezone, timedelta
@@ -92,6 +92,57 @@ async def situacoes_tributarias():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/ncm-is/{ncm}")
+async def ncm_imposto_seletivo(ncm: str):
+    """
+    Checks if an NCM is subject to IS. Always queries using 2027-01-01 (first IS year).
+    Returns: { tributadoPeloImpostoSeletivo, aliquotaAdValorem, capitulo, subitem }
+    """
+    try:
+        return await buscar_ncm_is(ncm, "2027-01-01")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Erro ao consultar NCM IS: {e.response.text}",
+        )
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Calculadora RTC indisponível.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/situacoes-is")
+async def situacoes_is():
+    """Returns the list of CST codes for IS. Uses 2027-01-01 (first IS year)."""
+    try:
+        return await buscar_situacoes_is("2027-01-01")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Erro ao buscar situações IS: {e.response.text}",
+        )
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Calculadora RTC indisponível.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/classificacoes-is/{cst_id}")
+async def classificacoes_is_por_cst(cst_id: int):
+    """Returns IS cClassTrib classifications for a given IS CST id. Uses 2027-01-01."""
+    try:
+        return await buscar_classificacoes_tributarias(cst_id, "2027-01-01")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Erro ao buscar classificações IS: {e.response.text}",
+        )
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail="Calculadora RTC indisponível.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/classificacoes-tributarias/{cst_id}")
 async def classificacoes_tributarias(cst_id: int):
     """Returns cClassTrib classifications for the given CST id, using today's date."""
@@ -121,6 +172,7 @@ async def calcular(nota: NotaFiscalInput):
         for item in nota_dict.get("itens", []):
             item.pop("descricao", None)
             item.pop("nbs", None)
+            item.pop("impostoSeletivo", None)  # IS não aplica em 2026 (fase piloto)
 
         base = _base_payload(nota_dict)
         itens = nota_dict.get("itens", [])

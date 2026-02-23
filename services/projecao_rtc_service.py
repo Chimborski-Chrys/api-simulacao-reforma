@@ -17,7 +17,7 @@ from typing import Optional
 import httpx
 
 from services.calculadora_service import BASE_URL, LOCAL_URL, _HEADERS
-from services.transicao_service import TRANSITION_YEARS, detectar_is
+from services.transicao_service import TRANSITION_YEARS
 
 
 async def _post_year(year: int, payload: dict) -> dict:
@@ -71,10 +71,11 @@ def _extrair_itens_rtc(objetos: list, itens_input: list) -> list:
 
         is_trib = trib.get("IS", {})
         vIS = float(is_trib.get("vIS", 0) or 0)
+        pIS = float(is_trib.get("pIS", 0) or 0)   # alíquota IS retornada pela API (ex: 3.0)
 
         inp = inp_by_num.get(nobj, {})
         ncm = inp.get("ncm", "")
-        is_info = detectar_is(ncm) if vIS > 0 else None
+        is_info = {"rate": pIS / 100, "desc": "Imposto Seletivo"} if vIS > 0 else None
 
         result.append({
             "numero":      nobj,
@@ -115,13 +116,21 @@ async def calcular_projecao_rtc(
     v_pisCofins = float(ta.get("vPIS", 0))  + float(ta.get("vCOFINS", 0))
     v_ipi       = float(ta.get("vIPI", 0))
 
-    # Build one payload per year — only dataHoraEmissao changes
+    # Build one payload per year — only dataHoraEmissao (and IS presence) changes
     async def _task(cfg: dict):
         year = cfg["ano"]
+        # IS only applies from 2027 onwards — strip it from 2026 pilot payload
+        if year >= 2027:
+            itens_api = itens_normalizados
+        else:
+            itens_api = [
+                {k: v for k, v in item.items() if k != "impostoSeletivo"}
+                for item in itens_normalizados
+            ]
         payload = {
             **base_payload,
             "dataHoraEmissao": f"{year}-01-01T12:00:00-03:00",
-            "itens": itens_normalizados,
+            "itens": itens_api,
         }
         resultado = await _post_year(year, payload)
         return cfg, resultado
